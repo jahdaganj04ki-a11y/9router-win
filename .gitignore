@@ -91,6 +91,10 @@ graphify-out/*
 .kiro/
 9router-*
 
+# Tauri build artefacts
+src-tauri/target/
+src-tauri/target-*/
+
 # Local sensitive / temp files
 .engine-token.txt
 .tmp-prov.json

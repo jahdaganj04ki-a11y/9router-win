@@ -1,0 +1,31 @@
+[package]
+name = "ninerouter"
+version = "0.5.111"
+description = "9Router - native Windows desktop app (Tauri v2 + WebView2)"
+edition = "2021"
+
+[[bin]]
+name = "9router"
+path = "src/main.rs"
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+url = "2"
+walkdir = "2"
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+lto = true
+opt-level = "z"
+strip = true

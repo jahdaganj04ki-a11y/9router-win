@@ -1,0 +1,100 @@
+name: Build 9router (Windows)
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  # Node.js LTS binary gebündelt in das Installer-Paket (better-sqlite3@13.0.3 braucht Node >= 22).
+  NODE_VERSION: "22.13.0"
+  NODE_ARCH: "win-x64"
+  TAURI_VERSION: "2"
+
+jobs:
+  build:
+    name: Windows x64 (NSIS + MSI)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (für npm/Next.js Build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          check-latest: true
+
+      - name: Setup Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install Tauri CLI v2
+        run: cargo install tauri-cli --version ${{ env.TAURI_VERSION }} --locked
+        shell: pwsh
+
+      - name: Node.js v22 Binary herunterladen (zur Bündelung)
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP/node.zip"
+          $url = "https://nodejs.org/dist/v${env:NODE_VERSION}/node-v${env:NODE_VERSION}-${env:NODE_ARCH}.zip"
+          Write-Host "Lade Node.js herunter: $url"
+          Invoke-WebRequest -Uri $url -OutFile $zip -TimeoutSec 300
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP/node" -Force
+          $src = Get-ChildItem -Path "$env:RUNNER_TEMP/node/*/node.exe" | Select-Object -First 1
+          if (-not $src) { throw "node.exe nicht im Node.js-Paket gefunden" }
+          New-Item -ItemType Directory -Path "src-tauri/resources/node" -Force | Out-Null
+          Copy-Item -Path $src.FullName -Destination "src-tauri/resources/node/node.exe" -Force
+          Write-Host "Node.js Binary bereitgestellt unter src-tauri/resources/node/node.exe"
+          # npm.cmd nebenbei mitkopieren (wird für sqlite-runtime npm install genutzt)
+          $npm = Get-ChildItem -Path "$env:RUNNER_TEMP/node/*/npm.cmd" | Select-Object -First 1
+          if ($npm) { Copy-Item -Path $npm.FullName -Destination "src-tauri/resources/node/npm.cmd" -Force }
+
+      - name: Abhängigkeiten installieren
+        run: npm install
+        shell: pwsh
+
+      - name: Next.js Standalone bauen
+        run: npm run build
+        shell: pwsh
+        # postbuild führt copy-standalone-assets.mjs aus (copiert custom-server.js, static, public in .next/standalone)
+
+      - name: Standalone-Build in Tauri Resources kopieren
+        run: node scripts/copy-standalone-to-tauri.mjs
+        shell: pwsh
+
+      - name: Tauri App bauen (NSIS + MSI)
+        run: cargo tauri build --target x86_64-pc-windows-msvc
+        shell: pwsh
+
+      - name: Build-Artefakte auflisten
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -Recurse | Select-Object Name, Length
+          Get-ChildItem -Path "src-tauri/target/release" -Filter "*.msi" -Recurse | Select-Object Name, Length
+          Get-ChildItem -Path "src-tauri/target/release" -Filter "*setup*.exe" -Recurse | Select-Object Name, Length
+
+      - name: Artefakte hochladen (Installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: 9router-windows-installer
+          path: |
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
+          retention-days: 30
+          if-no-files-found: warn
+
+      # ----------------------------------------------------------------------
+      # Optional: Code-Signierung (selbst-signiertes / EV Zertifikat)
+      # ----------------------------------------------------------------------
+      # - name: Installer signieren
+      #   shell: pwsh
+      #   run: |
+      #     signtool sign /a /f ${{ secrets.CODE_SIGN_PFX }} /p ${{ secrets.CODE_SIGN_PW }} `
+      #       /tr http://timestamp.digicert.com /td SHA256 src-tauri/target/release/bundle/nsis/9router_setup.exe
+      #   env:
+      #     CODE_SIGN_PFX: ${{ secrets.CODE_SIGN_PFX }}
+      #     CODE_SIGN_PW: ${{ secrets.CODE_SIGN_PW }}
