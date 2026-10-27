@@ -33,7 +33,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install Tauri CLI v2
-        run: cargo install tauri-cli --version ${{ env.TAURI_VERSION }} --locked
+        run: cargo install tauri-cli --locked
         shell: pwsh
 
       - name: Node.js v22 Binary herunterladen (zur Bündelung)

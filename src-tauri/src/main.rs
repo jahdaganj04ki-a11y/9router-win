@@ -7,7 +7,6 @@ mod single_instance;
 mod sqlite;
 
 use std::collections::HashMap;
-use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -15,9 +14,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{
-    generate_context, generate_handler, Manager, RunEvent, State, SystemTray, SystemTrayEvent,
-    SystemTrayMenu, SystemTrayMenuItem, WebviewUrl, WindowEvent,
+    generate_context, generate_handler, Manager, RunEvent, State, WebviewUrl, WindowEvent,
 };
+use tauri::tray::{SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
 use tauri::{AppHandle, Builder, WebviewWindowBuilder};
 
 use crate::port::{find_free_port, port_in_use, wait_for_port, DEFAULT_PORT};
@@ -44,14 +43,14 @@ impl Default for ServerState {
 // --- Pfade (mirror src/lib/dataDir.js & cli/cli.js conventions) ---
 
 pub fn data_dir() -> PathBuf {
-    env::var("APPDATA")
+    std::env::var("APPDATA")
         .ok()
         .map(|appdata| PathBuf::from(appdata).join(APP_NAME))
         .unwrap_or_else(|| std::env::temp_dir().join(APP_NAME))
 }
 
 pub fn resources_dir() -> PathBuf {
-    env::current_exe()
+    std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|p| p.to_path_buf()))
         .unwrap_or_default()
@@ -120,7 +119,7 @@ pub fn load_or_create_secrets(path: &std::path::Path) -> HashMap<String, String>
 // --- Node-Prozess Umgebung ---
 
 pub fn build_node_env(data_dir: &PathBuf, port: u16, secrets: &HashMap<String, String>) -> HashMap<String, String> {
-    let mut env_map: HashMap<String, String> = env::vars().collect();
+    let mut env_map: HashMap<String, String> = std::env::vars().collect();
     let base_url = format!("http://127.0.0.1:{}", port);
 
     let runtime_nm = data_dir.join("runtime").join("node_modules");
@@ -298,14 +297,40 @@ fn main() {
 
     Builder::default()
         .manage(ServerState::default())
-        .system_tray(SystemTray::new().with_id("tray"))
         .setup(|app| {
             let app_handle = app.handle();
             let state: State<'_, ServerState> = app.state();
             if let Err(e) = bootstrap(&app_handle, &state) {
                 eprintln!("[9router] Start fehlgeschlagen: {}", e);
             }
-            build_tray(app)?;
+
+            // System Tray aufbauen
+            let menu = SystemTrayMenu::new()
+                .add_item(SystemTrayMenuItem::new(
+                    "dashboard",
+                    true,
+                    None,
+                    "Dashboard öffnen",
+                ))
+                .add_item(SystemTrayMenuItem::new(
+                    "autostart",
+                    true,
+                    None,
+                    "Autostart",
+                ))
+                .add_item(SystemTrayMenuItem::new("exit", true, None, "Beenden"));
+
+            let _tray = SystemTray::new()
+                .with_id("tray")
+                .with_menu(menu)
+                .build(app.handle())?;
+
+            if let Some(tray) = app.tray_handle_by_id("tray") {
+                if let Some(item) = tray.get_item("autostart") {
+                    let _ = item.set_selected(commands::is_autostart_enabled());
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(generate_handler![
