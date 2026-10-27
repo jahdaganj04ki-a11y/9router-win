@@ -106,3 +106,5 @@ src-tauri/target-*/
 start-dev-silent.cjs
 debug.log
 .scratch/
+src-tauri/resources/node/node.exe
+src-tauri/resources/node/npm.cmd
