@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const SECRET_KEYS: &[&str] = &["JWT_SECRET", "API_KEY_SECRET", "MACHINE_ID_SALT"];
 
@@ -50,7 +50,7 @@ pub fn persist_secrets(missing: &[(&str, String)]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut existing = read_env_file();
+    let existing = read_env_file();
     let mut new_lines: Vec<String> = Vec::new();
     for (k, v) in missing {
         if existing.contains_key(*k) {
@@ -67,6 +67,7 @@ pub fn persist_secrets(missing: &[(&str, String)]) -> std::io::Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn load_env_file_into_process() {
     let path = env_path();
     let Ok(content) = fs::read_to_string(&path) else { return };
@@ -103,6 +104,7 @@ pub fn ensure_secrets() -> HashMap<String, String> {
     existing
 }
 
+#[allow(dead_code)]
 pub fn secret_env_vars() -> Vec<(String, String)> {
     let map = ensure_secrets();
     SECRET_KEYS

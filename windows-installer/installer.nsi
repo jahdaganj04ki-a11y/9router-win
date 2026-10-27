@@ -1,24 +1,31 @@
-; 9router NSIS-Installer (Windows)
-; Bauen auf einem Windows-Host:  makensis installer.nsi
-; Signieren (optional):          signtool sign /a /f cert.pfx /p <pw> /tr http://timestamp.digicert.com /td SHA256 9router_setup.exe
-
-!include "Mui2.nsh"
-!include "Mui.nsh"
+; 9Router NSIS Installer
+; Build with makensis on a Windows host.
 
 !define APP_NAME "9router"
 !define APP_VERSION "0.5.111"
-!define INSTALLER_NAME "9router_setup.exe"
-!define DEFAULT_DIR "C:\Program Files\9router"
-!define RUN_KEY "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
-!define RUN_VALUE "9router"
+!define APP_PUBLISHER "decolua"
+!define APP_EXE "9router.exe"
+!define UNINSTALLER_NAME "uninstall.exe"
+!define REG_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_NAME}"
+!define RUN_KEY "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+!define RUN_VALUE "${APP_NAME}"
 
-!installlang LANG_ENGLISH
+!include "MUI2.nsh"
+!include "x64.nsh"
+!include "WinVer.nsh"
+
+Name "${APP_NAME} ${APP_VERSION}"
+OutFile "9router_setup_${APP_VERSION}.exe"
+InstallDir "$PROGRAMFILES64\\${APP_NAME}"
+RequestExecutionLevel admin
+ShowInstDetails show
+ShowUnInstDetails show
+
 !define MUI_ABORTWARNING
-!define MUI_ICON "src-tauri\icons\icon.ico"
-!define MUI_UNICON "src-tauri\icons\icon.ico"
+!define MUI_ICON "src-tauri/icons/icon.ico"
+!define MUI_UNICON "src-tauri/icons/icon.ico"
 
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -29,47 +36,64 @@
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_UNPAGE_FINISH
 
-Name "${APP_NAME} ${APP_VERSION}"
-OutFile "..\..\dist\${INSTALLER_NAME}"
-InstallDir "${DEFAULT_DIR}"
-RequestExecutionLevel admin
-ShowInstDetails show
+!insertmacro MUI_LANGUAGE "German"
+!insertmacro MUI_LANGUAGE "English"
 
-Section "9router-App" SecApp
+; Main application section
+Section "9router" SecMain
   SetOutPath "$INSTDIR"
-  File /r "src-tauri\resources\node\*.*"
-  File /r "src-tauri\resources\app\*.*"
-  File "9router.exe"
-  CreateShortCut "$SMPROGRAMMS\${APP_NAME}.lnk" "$INSTDIR\${APP_NAME}.exe"
+
+  ; Tauri binary (built for x86_64-pc-windows-msvc)
+  File "src-tauri/target/x86_64-pc-windows-msvc/release/9router.exe"
+
+  ; Node.js binary
+  SetOutPath "$INSTDIR\\resources\\node"
+  File /r "src-tauri/resources/node/*"
+
+  ; Standalone app
+  SetOutPath "$INSTDIR\\resources\\app"
+  File /r "src-tauri/resources/app/*"
+
+  ; Uninstaller
+  WriteUninstaller "$INSTDIR\\${UNINSTALLER_NAME}"
+
+  ; Registry: Uninstall info
+  WriteRegStr HKLM "${REG_KEY}" "DisplayName" "${APP_NAME} ${APP_VERSION}"
+  WriteRegStr HKLM "${REG_KEY}" "DisplayVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "${REG_KEY}" "Publisher" "${APP_PUBLISHER}"
+  WriteRegStr HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKLM "${REG_KEY}" "UninstallString" '"$INSTDIR\\${UNINSTALLER_NAME}"'
+  WriteRegStr HKLM "${REG_KEY}" "DisplayIcon" '"$INSTDIR\\${APP_EXE}"'
+
+  ; Autostart is NOT set by default (user toggles in-app)
 SectionEnd
 
-Section "Desktop-Verknüpfung" SecDesktop
-  CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_NAME}.exe"
+Section "Desktop Shortcut" SecDesktop
+  CreateShortcut "$DESKTOP\\${APP_NAME}.lnk" "$INSTDIR\\${APP_EXE}"
 SectionEnd
 
-Section -Uninstall
-  Delete "$INSTDIR\${APP_NAME}.exe"
-  Delete "$INSTDIR\uninstall.exe"
-  RMDir /r "$INSTDIR\resources"
-  Delete "$SMPROGRAMMS\${APP_NAME}.lnk"
-  Delete "$DESKTOP\${APP_NAME}.lnk"
-  DeleteRegValue ${RUN_KEY} "${RUN_VALUE}"
-  ; DATA_DIR (%APPDATA%\9router) bleibt bestehen — Nutzerdaten nicht löschen
-  RMDir "$INSTDIR"
+Section "Start Menu Shortcut" SecStartMenu
+  CreateShortcut "$SMPROGRAMS\\${APP_NAME}.lnk" "$INSTDIR\\${APP_EXE}"
 SectionEnd
 
 Function .onInit
-  !insertmacro MUI_RESERVEFILE_INSTALLOPTIONAL DeskIcon
+  ${If} ${FileExists} "$SYSDIR\\WebView2Loader.dll"
+    DetailPrint "WebView2 Runtime ist installiert."
+  ${Else}
+    DetailPrint "WebView2 Runtime fehlt. Nach der Installation kann der Bootstrapper nachgeladen werden."
+  ${EndIf}
+
+  ${If} ${FileExists} "$SYSDIR\\msvcp140.dll"
+    DetailPrint "VC++ Redistributable ist vorhanden."
+  ${Else}
+    DetailPrint "Hinweis: VC++ Redistributable könnte fehlen."
+  ${EndIf}
 FunctionEnd
 
 Function un.onInit
-  MessageBox MB_OKCANCEL "${APP_NAME} deinstallieren?" IDOK +2
-  Abort
+  DeleteRegValue HKCU "${RUN_KEY}" "${RUN_VALUE}"
 FunctionEnd
 
 Function .onFinish
-  ${If} ${FileExists} "$PROGRAMFILES64\Microsoft\EdgeWebView\Application\*\WebView2Loader.dll"
-  ${Else}
-    MessageBox MB_OK "Hinweis: Microsoft Edge WebView2 Runtime nicht gefunden. ${APP_NAME} benoetigt die WebView2-Runtime.\nBootstrapper: https://aka.ms/WebView2Bootstrapper"
-  ${EndIf}
+  Exec '"$INSTDIR\\${APP_EXE}"'
 FunctionEnd

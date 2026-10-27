@@ -14,10 +14,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::{
-    generate_context, generate_handler, Manager, RunEvent, State, WebviewUrl, WindowEvent,
+    generate_handler, Manager, RunEvent, State, WebviewUrl, WindowEvent,
 };
-use tauri::menu::{MenuBuilder, MenuEvent, MenuItemBuilder};
-use tauri::tray::{TrayIcon, TrayIconBuilder, TrayIconEvent, TrayIconId};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Builder, WebviewWindowBuilder};
 
 use crate::port::{find_free_port, DEFAULT_PORT};
