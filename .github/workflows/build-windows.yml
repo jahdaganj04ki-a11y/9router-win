@@ -73,17 +73,17 @@ jobs:
       - name: Build-Artefakte auflisten
         shell: pwsh
         run: |
-          Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -Recurse | Select-Object Name, Length
-          Get-ChildItem -Path "src-tauri/target/release" -Filter "*.msi" -Recurse | Select-Object Name, Length
-          Get-ChildItem -Path "src-tauri/target/release" -Filter "*setup*.exe" -Recurse | Select-Object Name, Length
+          Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release" -Filter "*.exe" -Recurse | Select-Object Name, Length
+          Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release" -Filter "*.msi" -Recurse | Select-Object Name, Length
+          Get-ChildItem -Path "src-tauri/target/x86_64-pc-windows-msvc/release" -Filter "*setup*.exe" -Recurse | Select-Object Name, Length
 
       - name: Artefakte hochladen (Installer)
         uses: actions/upload-artifact@v4
         with:
           name: 9router-windows-installer
           path: |
-            src-tauri/target/release/bundle/**/*.exe
-            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/**/*.msi
           retention-days: 30
           if-no-files-found: warn
 
@@ -94,7 +94,7 @@ jobs:
       #   shell: pwsh
       #   run: |
       #     signtool sign /a /f ${{ secrets.CODE_SIGN_PFX }} /p ${{ secrets.CODE_SIGN_PW }} `
-      #       /tr http://timestamp.digicert.com /td SHA256 src-tauri/target/release/bundle/nsis/9router_setup.exe
+      #       /tr http://timestamp.digicert.com /td SHA256 src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/9router_setup.exe
       #   env:
       #     CODE_SIGN_PFX: ${{ secrets.CODE_SIGN_PFX }}
       #     CODE_SIGN_PW: ${{ secrets.CODE_SIGN_PW }}
