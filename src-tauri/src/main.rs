@@ -16,10 +16,11 @@ use std::time::Duration;
 use tauri::{
     generate_context, generate_handler, Manager, RunEvent, State, WebviewUrl, WindowEvent,
 };
-use tauri::tray::{SystemTray, SystemTrayEvent, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::menu::{MenuBuilder, MenuEvent, MenuItemBuilder};
+use tauri::tray::{TrayIcon, TrayIconBuilder, TrayIconEvent, TrayIconId};
 use tauri::{AppHandle, Builder, WebviewWindowBuilder};
 
-use crate::port::{find_free_port, port_in_use, wait_for_port, DEFAULT_PORT};
+use crate::port::{find_free_port, DEFAULT_PORT};
 use crate::single_instance::SingleInstance;
 use crate::sqlite::ensure_sqlite_runtime;
 
@@ -259,35 +260,6 @@ fn stop_server(state: &State<'_, ServerState>) {
     *state.port.lock().unwrap() = None;
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let autostart_on = commands::is_autostart_enabled();
-    let menu = SystemTrayMenu::new()
-        .add_item(SystemTrayMenuItem::new(
-            "dashboard",
-            true,
-            None,
-            "Dashboard öffnen",
-        ))
-        .add_item(SystemTrayMenuItem::new(
-            "autostart",
-            true,
-            None,
-            "Autostart",
-        ))
-        .add_item(SystemTrayMenuItem::new("exit", true, None, "Beenden"));
-
-    let _tray = SystemTray::new()
-        .with_id("tray")
-        .with_menu(menu)
-        .build(app)?;
-
-    if let Some(item) = app.tray_handle_by_id("tray").and_then(|t| t.get_item("autostart")) {
-        let _ = item.set_selected(autostart_on);
-    }
-
-    Ok(())
-}
-
 fn main() {
     // Single-Instance: zweite Instanz bringt erstes Fenster nach vorne und beendet sich.
     let _single = match SingleInstance::acquire() {
@@ -304,32 +276,53 @@ fn main() {
                 eprintln!("[9router] Start fehlgeschlagen: {}", e);
             }
 
-            // System Tray aufbauen
-            let menu = SystemTrayMenu::new()
-                .add_item(SystemTrayMenuItem::new(
-                    "dashboard",
-                    true,
-                    None,
-                    "Dashboard öffnen",
-                ))
-                .add_item(SystemTrayMenuItem::new(
-                    "autostart",
-                    true,
-                    None,
-                    "Autostart",
-                ))
-                .add_item(SystemTrayMenuItem::new("exit", true, None, "Beenden"));
+            // --- System Tray ---
+            let dashboard = MenuItemBuilder::with_id("dashboard", "Dashboard öffnen")
+                .build(app_handle)?;
+            let autostart = MenuItemBuilder::with_id("autostart", "Autostart")
+                .build(app_handle)?;
+            let exit = MenuItemBuilder::with_id("exit", "Beenden")
+                .build(app_handle)?;
 
-            let _tray = SystemTray::new()
-                .with_id("tray")
-                .with_menu(menu)
-                .build(app.handle())?;
+            let menu = MenuBuilder::new(app_handle)
+                .items(&[&dashboard, &autostart, &exit])
+                .build()?;
 
-            if let Some(tray) = app.tray_handle_by_id("tray") {
-                if let Some(item) = tray.get_item("autostart") {
-                    let _ = item.set_selected(commands::is_autostart_enabled());
+            let tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .build(app_handle)?;
+
+            tray.on_menu_event(move |app, event| {
+                if event.id() == "dashboard" {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                } else if event.id() == "autostart" {
+                    let _ = commands::toggle_autostart(true);
+                } else if event.id() == "exit" {
+                    if let Some(state) = app.try_state::<crate::ServerState>() {
+                        stop_server(&state);
+                    }
+                    app.exit(0);
+                }            });
+
+            tray.on_tray_icon_event(move |_tray, event| {
+                if matches!(
+                    event,
+                    TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }
+                ) {
+                    if let Some(window) = _tray.app_handle().get_webview_window("main") {
+                        let is_visible = window.is_visible().unwrap_or(false);
+                        if is_visible {
+                            let _ = window.hide();
+                        } else {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
                 }
-            }
+            });
 
             Ok(())
         })
@@ -352,55 +345,13 @@ fn main() {
                 }
             }
         })
-        .on_system_tray_event(|app, event| {
-            match event {
-                SystemTrayEvent::MenuItemClick { id, .. } => {
-                    match id.as_str() {
-                        "dashboard" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "autostart" => {
-                            if let Some(tray) = app.tray_handle_by_id("tray") {
-                                if let Some(item) = tray.get_item("autostart") {
-                                    let currently = item.is_selected().unwrap_or(false);
-                                    let next = !currently;
-                                    let _ = item.set_selected(next);
-                                    let _ = commands::toggle_autostart(next);
-                                }
-                            }
-                        }
-                        "exit" => {
-                            if let Some(state) = app.try_state::<ServerState>() {
-                                stop_server(state);
-                            }
-                            app.exit(0);
-                        }
-                        _ => {}
-                    }
-                }
-                SystemTrayEvent::TrayIconClick { .. } => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let is_visible = window.is_visible().unwrap_or(false);
-                        if is_visible {
-                            let _ = window.hide();
-                        } else {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        })
-        .run(|app, event| {
+        .build(tauri::generate_context!())
+        .expect("Fehler beim Erstellen der 9router-Anwendung")
+        .run(|app: &tauri::AppHandle, event| {
             if let RunEvent::ExitRequested { .. } = event {
                 if let Some(state) = app.try_state::<ServerState>() {
-                    stop_server(state);
+                    stop_server(&state);
                 }
             }
-        })
-        .expect("Fehler beim Starten der 9router-Anwendung");
+        });
 }

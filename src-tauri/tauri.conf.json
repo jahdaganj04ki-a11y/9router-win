@@ -1,14 +1,14 @@
 {
-  "$schema": "https://tauri.app/v2/api/config",
+  "$schema": "https://tauri.app/v2/assets/json/config.schema.json",
   "productName": "9router",
   "version": "0.5.111",
   "identifier": "com.decolua.9router",
-    "build": {
-      "frontendDist": "frontend-dist",
-      "devUrl": "",
-      "beforeDevCommand": "",
-      "beforeBuildCommand": ""
-    },
+  "build": {
+    "frontendDist": "frontend-dist",
+    "devUrl": null,
+    "beforeDevCommand": null,
+    "beforeBuildCommand": null
+  },
   "app": {
     "security": {
       "csp": null
@@ -17,18 +17,7 @@
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis"],
-    "icon": [
-      "src-tauri/icons/icon.ico"
-    ],
-    "resources": [
-      "resources/*"
-    ],
-    "windows": [
-      {
-        "certificateThumbprint": "",
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      }
-    ]
+    "icon": ["icons/icon.ico"],
+    "resources": ["resources/*"]
   }
 }

@@ -29,7 +29,7 @@ fn bring_existing_to_front() {
     let wide = to_wide(WINDOW_TITLE);
     unsafe {
         let hwnd = FindWindowW(ptr::null(), wide.as_ptr());
-        if hwnd != 0 {
+        if hwnd != std::ptr::null_mut() {
             let _ = ShowWindow(hwnd, SW_RESTORE);
             let _ = SetForegroundWindow(hwnd);
         }

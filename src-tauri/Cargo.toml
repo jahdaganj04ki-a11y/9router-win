@@ -24,9 +24,6 @@ windows-sys = { version = "0.59", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
 [profile.release]
 lto = true
 opt-level = "z"
